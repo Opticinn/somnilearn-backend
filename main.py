@@ -22,7 +22,6 @@ class SleepData(BaseModel):
     sleep_duration_hours: float
     sleep_start_time: str
     sleep_end_time: str
-    functional_impact: int
     journal_text: str
 
 @app.get("/")
@@ -31,25 +30,16 @@ def read_root():
 
 @app.post("/predict_insomnia")
 def predict_insomnia(data: SleepData):
-    # Logika prediksi berdasarkan data baru
     screen_hours = data.evening_screen_time_ms / 3_600_000
-    sleep_quality_factor = max(0, (8 - data.sleep_duration_hours) / 8)  # Kurang dari 8 jam = risiko
-    impact_factor = data.functional_impact / 10
+    sleep_quality_factor = max(0, (8 - data.sleep_duration_hours) / 8)
 
-    # Kombinasi faktor
-    risk = min(0.95,
-               (screen_hours * 0.3 +
-                sleep_quality_factor * 0.4 +
-                impact_factor * 0.3)
-               )
+    # 🔥 HANYA GUNAKAN 2 FAKTOR: layar malam + durasi tidur
+    risk = min(0.95, (screen_hours * 0.5 + sleep_quality_factor * 0.5))
 
-    # Rekomendasi berdasarkan pola
     if screen_hours > 2:
         rec = "Kurangi penggunaan layar setelah jam 21.00"
     elif data.sleep_duration_hours < 6:
         rec = "Coba tidur minimal 6-7 jam per malam"
-    elif data.functional_impact > 7:
-        rec = "Pertimbangkan teknik relaksasi sebelum tidur"
     else:
         rec = "Pertahankan rutinitas tidur konsisten"
 

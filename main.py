@@ -29,7 +29,7 @@ def read_root():
     return {"message": "✅ SomniLearn Backend Berjalan!"}
 
 @app.post("/predict_insomnia")
-def predict_insomnia(request_body: SleepData):
+def predict_insomnia(data: SleepData):
     # 1. Faktor Layar Malam (20.00–23.59)
     screen_hours = data.evening_screen_time_ms / 3_600_000
     screen_factor = min(screen_hours / 3.0, 1.0)  # Normalisasi ke [0,1]

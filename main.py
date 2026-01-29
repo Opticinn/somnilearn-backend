@@ -30,7 +30,7 @@ def read_root():
     return {"message": "✅ SomniLearn Backend Berjalan!"}
 
 @app.post("/predict_insomnia")
-def predict_insomnia( SleepData):
+def predict_insomnia(data: SleepData):
     # Logika prediksi berdasarkan data baru
     screen_hours = data.evening_screen_time_ms / 3_600_000
     sleep_quality_factor = max(0, (8 - data.sleep_duration_hours) / 8)  # Kurang dari 8 jam = risiko

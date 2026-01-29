@@ -63,16 +63,17 @@ def predict_insomnia(data: SleepData):
     start = datetime.datetime.strptime(data.sleep_start_time, "%H:%M").time()
     end = datetime.datetime.strptime(data.sleep_end_time, "%H:%M").time()
 
-    if start > datetime.time(21, 30):
-        rec = "⚠️ Tidur terlalu larut! Targetkan tidur sebelum jam 21.30"
-    elif end > datetime.time(8, 0):
-        rec = "⏰ Bangun terlalu siang! Coba bangun sebelum jam 08.00"
+# Di dalam fungsi predict_insomnia()
+    if start_h > 21 or (start_h == 21 and start_m > 30):
+        rec = f"Risiko insomnia Anda tinggi ({round(risk * 100)}%) karena tidur terlalu larut. Disarankan tidur sebelum jam 21.30 untuk kualitas tidur optimal."
+    elif end_h > 8:
+        rec = f"Risiko insomnia Anda ({round(risk * 100)}%) dipengaruhi oleh bangun terlalu siang. Coba bangun sebelum jam 08.00 untuk menjaga ritme sirkadian."
     elif data.sleep_duration_hours < 7:
-        rec = "🛌 Durasi tidur kurang! Target minimal 7-8 jam"
+        rec = f"Durasi tidur Anda hanya {data.sleep_duration_hours} jam. Risiko insomnia: {round(risk * 100)}%. Targetkan minimal 7-8 jam per malam."
     elif screen_hours > 2:
-        rec = "📱 Kurangi layar setelah jam 21.00"
+        rec = f"Penggunaan layar malam hari melebihi 2 jam → risiko insomnia {round(risk * 100)}%. Kurangi layar setelah jam 21.00."
     else:
-        rec = "✅ Pola tidur Anda optimal! Pertahankan!"
+        rec = f"Pola tidur Anda optimal! Risiko insomnia rendah ({round(risk * 100)}%). Pertahankan konsistensi ini."
 
     return {
         "insomnia_risk": round(risk, 2),

@@ -17,8 +17,9 @@ class SleepData(BaseModel):
     evening_screen_time_ms: int
     app_switching_freq: int
     blue_light_duration_ms: int
-    sleep_quality: int
-    stress_level: int
+    sleep_duration_hours: float
+    sleep_start_time: str
+    sleep_end_time: str
     journal_text: str
 
 @app.get("/")

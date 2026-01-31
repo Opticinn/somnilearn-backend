@@ -86,7 +86,7 @@ def calculate_circadian_stability(user_id: str = "default_user") -> float:
         return None
 
 @app.post("/predict_sleep_health")
-def predict_sleep_health( SleepData):
+def predict_sleep_health(data: SleepData):
     try:
         # Simpan data ke database
         try:

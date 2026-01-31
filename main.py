@@ -17,6 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(DATABASE_URL) if DATABASE_URL else None
+
 # 🔥 DEFINISI CLASS HARUS DI ATAS FUNGSI
 class SleepData(BaseModel):
     total_screen_time_ms: int

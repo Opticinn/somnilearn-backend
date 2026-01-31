@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 # 🔥 KONEKSI DATABASE
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")  # fallback ke SQLite lokal
+DATABASE_URL = os.getenv("DATABASE_URL")  # fallback ke SQLite lokal
 engine = create_engine(DATABASE_URL)
 
 class SleepData(BaseModel):

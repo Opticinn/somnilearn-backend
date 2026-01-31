@@ -58,7 +58,7 @@ def init_db():
             print(f"DB init error: {e}")
 
 @app.post("/predict_sleep_health")
-async def predict_sleep_health( SleepData):
+async def predict_sleep_health(data: SleepData):
     # Simpan ke database jika tersedia
     engine = get_engine()
     if engine:

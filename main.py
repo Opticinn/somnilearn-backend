@@ -17,11 +17,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 🔥 DEFINISI CLASS HARUS DI ATAS FUNGSI
+class SleepData(BaseModel):
+    total_screen_time_ms: int
+    evening_screen_time_ms: int
+    app_switching_freq: int
+    blue_light_duration_ms: int
+    sleep_duration_hours: float
+    sleep_start_time: str
+    sleep_end_time: str
+    journal_text: str
+
 def get_engine() -> Engine:
     """Buat engine hanya saat dibutuhkan"""
     DATABASE_URL = os.getenv("DATABASE_URL")
     if not DATABASE_URL:
-        # Jika tidak ada DATABASE_URL, gunakan SQLite sementara
+        # Fallback ke SQLite jika tidak ada DATABASE_URL
         return create_engine("sqlite:///./temp.db")
     return create_engine(DATABASE_URL)
 
@@ -63,7 +74,6 @@ def init_db():
         print("✅ Database initialized successfully")
     except Exception as e:
         print(f"⚠️ Database initialization failed: {e}")
-        # Jangan crash aplikasi - biarkan jalan dengan fitur terbatas
 
 def calculate_circadian_stability(user_id: str = "default_user") -> float:
     """Hitung Circadian Stability Score dari 7 hari terakhir"""
@@ -116,7 +126,7 @@ def calculate_circadian_stability(user_id: str = "default_user") -> float:
         return None
 
 @app.post("/predict_sleep_health")
-async def predict_sleep_health(data: SleepData):
+async def predict_sleep_health( SleepData):
     try:
         # Simpan data ke database
         try:

@@ -31,9 +31,16 @@ def get_db_url():
 
 def get_engine():
     db_url = get_db_url()
+    print(f"🔍 DATABASE_URL: {'SET' if db_url else 'NOT SET'}")
     if not db_url:
         return None
-    return create_engine(db_url)
+    try:
+        engine = create_engine(db_url)
+        print("✅ Engine created successfully")
+        return engine
+    except Exception as e:
+        print(f"❌ Engine creation failed: {e}")
+        return None
 
 @app.on_event("startup")
 def init_db():
@@ -41,8 +48,13 @@ def init_db():
     if engine:
         try:
             with engine.connect() as conn:
+                # Cek apakah koneksi berhasil
+                result = conn.execute(text("SELECT version()"))
+                print(f"✅ Database connected: {result.fetchone()[0]}")
+
+                # Buat tabel di schema public
                 conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS sleep_records (
+                    CREATE TABLE IF NOT EXISTS public.sleep_records (
                         id SERIAL PRIMARY KEY,
                         user_id TEXT DEFAULT 'default_user',
                         date DATE,
@@ -54,8 +66,9 @@ def init_db():
                     )
                 """))
                 conn.commit()
+                print("✅ Table sleep_records created/verified")
         except Exception as e:
-            print(f"DB init error: {e}")
+            print(f"❌ DB init error: {e}")
 
 @app.post("/predict_sleep_health")
 async def predict_sleep_health(data: SleepData):

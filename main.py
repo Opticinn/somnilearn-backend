@@ -1,10 +1,10 @@
-# main.py (versi lengkap dengan PostgreSQL)
+# main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import datetime
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 app = FastAPI(title="SomniLearn Backend")
@@ -17,45 +17,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🔥 KONEKSI DATABASE
-DATABASE_URL = os.getenv("DATABASE_URL")  # fallback ke SQLite lokal
-engine = create_engine(DATABASE_URL)
+# 🔥 JANGAN inisialisasi engine di sini!
+# engine = create_engine(DATABASE_URL)
 
-class SleepData(BaseModel):
-    total_screen_time_ms: int
-    evening_screen_time_ms: int
-    app_switching_freq: int
-    blue_light_duration_ms: int
-    sleep_duration_hours: float
-    sleep_start_time: str
-    sleep_end_time: str
-    journal_text: str
+def get_engine() -> Engine:
+    """Buat engine hanya saat dibutuhkan"""
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL is not set")
+    return create_engine(DATABASE_URL)
 
 @app.on_event("startup")
 def init_db():
     """Buat tabel jika belum ada"""
-    with engine.connect() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS sleep_records (
-                id SERIAL PRIMARY KEY,
-                user_id TEXT DEFAULT 'default_user',
-                date DATE,
-                sleep_start TIME,
-                sleep_end TIME,
-                duration_hours FLOAT,
-                screen_evening_ms INT,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        """))
-        conn.commit()
-
-@app.get("/")
-def read_root():
-    return {"message": "✅ SomniLearn Backend Berjalan!"}
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS sleep_records (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT DEFAULT 'default_user',
+                    date DATE,
+                    sleep_start TIME,
+                    sleep_end TIME,
+                    duration_hours FLOAT,
+                    screen_evening_ms INT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            conn.commit()
+    except Exception as e:
+        print(f"Database initialization error: {e}")
 
 def calculate_circadian_stability(user_id: str = "default_user") -> float:
     """Hitung Circadian Stability Score dari 7 hari terakhir"""
     try:
+        engine = get_engine()  # 🔥 Dapatkan engine saat dibutuhkan
         with engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT 
@@ -71,18 +68,15 @@ def calculate_circadian_stability(user_id: str = "default_user") -> float:
             records = result.fetchall()
 
             if len(records) < 3:
-                return None  # Butuh minimal 3 hari data
+                return None
 
-            # Ekstrak menit tidur & bangun
             start_minutes = [r[0] for r in records]
             end_minutes = [r[1] for r in records]
 
-            # Hitung standar deviasi
             import statistics
             sd_start = statistics.stdev(start_minutes) if len(start_minutes) > 1 else 0
             sd_end = statistics.stdev(end_minutes) if len(end_minutes) > 1 else 0
 
-            # Normalisasi ke skala 0-1 (max deviasi = 120 menit)
             max_dev = 120.0
             stability = 1.0 - min((sd_start + sd_end) / (2 * max_dev), 1.0)
             return round(max(0.0, stability), 2)
@@ -96,6 +90,7 @@ def predict_sleep_health( SleepData):
     try:
         # Simpan data ke database
         try:
+            engine = get_engine()  # 🔥 Dapatkan engine saat dibutuhkan
             with engine.connect() as conn:
                 conn.execute(text("""
                     INSERT INTO sleep_records 
@@ -126,7 +121,6 @@ def predict_sleep_health( SleepData):
         insomnia_risk = min(0.95, screen_factor * 0.5 + timing_factor * 0.5)
         sleep_deprivation = 1 if data.sleep_duration_hours < 6.0 else 0
 
-        # 🔥 HITUNG CIRCADIAN STABILITY
         circadian_stability = calculate_circadian_stability()
 
         # Rekomendasi berjenjang
@@ -165,6 +159,7 @@ def predict_sleep_health( SleepData):
         }
 
     except Exception as e:
+        print(f"Unexpected error: {e}")
         return {
             "circadian_stability": None,
             "insomnia_risk": 0.5,

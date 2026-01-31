@@ -17,53 +17,83 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🔥 JANGAN inisialisasi engine di sini!
-# engine = create_engine(DATABASE_URL)
-
 def get_engine() -> Engine:
     """Buat engine hanya saat dibutuhkan"""
     DATABASE_URL = os.getenv("DATABASE_URL")
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL is not set")
+        # Jika tidak ada DATABASE_URL, gunakan SQLite sementara
+        return create_engine("sqlite:///./temp.db")
     return create_engine(DATABASE_URL)
 
 @app.on_event("startup")
 def init_db():
-    """Buat tabel jika belum ada"""
+    """Buat tabel jika belum ada - dengan error handling kuat"""
     try:
         engine = get_engine()
         with engine.connect() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS sleep_records (
-                    id SERIAL PRIMARY KEY,
-                    user_id TEXT DEFAULT 'default_user',
-                    date DATE,
-                    sleep_start TIME,
-                    sleep_end TIME,
-                    duration_hours FLOAT,
-                    screen_evening_ms INT,
-                    created_at TIMESTAMP DEFAULT NOW()
-                )
-            """))
+            # Untuk SQLite, gunakan sintaks yang kompatibel
+            if "sqlite" in str(engine.url):
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS sleep_records (
+                        id INTEGER PRIMARY KEY,
+                        user_id TEXT DEFAULT 'default_user',
+                        date DATE,
+                        sleep_start TIME,
+                        sleep_end TIME,
+                        duration_hours REAL,
+                        screen_evening_ms INTEGER,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+            else:
+                # Untuk PostgreSQL
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS sleep_records (
+                        id SERIAL PRIMARY KEY,
+                        user_id TEXT DEFAULT 'default_user',
+                        date DATE,
+                        sleep_start TIME,
+                        sleep_end TIME,
+                        duration_hours FLOAT,
+                        screen_evening_ms INT,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                """))
             conn.commit()
+        print("✅ Database initialized successfully")
     except Exception as e:
-        print(f"Database initialization error: {e}")
+        print(f"⚠️ Database initialization failed: {e}")
+        # Jangan crash aplikasi - biarkan jalan dengan fitur terbatas
 
 def calculate_circadian_stability(user_id: str = "default_user") -> float:
     """Hitung Circadian Stability Score dari 7 hari terakhir"""
     try:
-        engine = get_engine()  # 🔥 Dapatkan engine saat dibutuhkan
+        engine = get_engine()
         with engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT 
-                    EXTRACT(EPOCH FROM sleep_start)/60 as start_minutes,
-                    EXTRACT(EPOCH FROM sleep_end)/60 as end_minutes
-                FROM sleep_records 
-                WHERE user_id = :user_id 
-                AND date >= CURRENT_DATE - INTERVAL '7 days'
-                ORDER BY date DESC
-                LIMIT 7
-            """), {"user_id": user_id})
+            if "sqlite" in str(engine.url):
+                result = conn.execute(text("""
+                    SELECT 
+                        CAST(strftime('%H', sleep_start) AS INTEGER) * 60 + 
+                        CAST(strftime('%M', sleep_start) AS INTEGER) as start_minutes,
+                        CAST(strftime('%H', sleep_end) AS INTEGER) * 60 + 
+                        CAST(strftime('%M', sleep_end) AS INTEGER) as end_minutes
+                    FROM sleep_records 
+                    WHERE user_id = :user_id 
+                    AND date >= date('now', '-7 days')
+                    ORDER BY date DESC
+                    LIMIT 7
+                """), {"user_id": user_id})
+            else:
+                result = conn.execute(text("""
+                    SELECT 
+                        EXTRACT(EPOCH FROM sleep_start)/60 as start_minutes,
+                        EXTRACT(EPOCH FROM sleep_end)/60 as end_minutes
+                    FROM sleep_records 
+                    WHERE user_id = :user_id 
+                    AND date >= CURRENT_DATE - INTERVAL '7 days'
+                    ORDER BY date DESC
+                    LIMIT 7
+                """), {"user_id": user_id})
 
             records = result.fetchall()
 
@@ -90,24 +120,42 @@ async def predict_sleep_health(data: SleepData):
     try:
         # Simpan data ke database
         try:
-            engine = get_engine()  # 🔥 Dapatkan engine saat dibutuhkan
+            engine = get_engine()
             with engine.connect() as conn:
-                conn.execute(text("""
-                    INSERT INTO sleep_records 
-                    (date, sleep_start, sleep_end, duration_hours, screen_evening_ms)
-                    VALUES (
-                        CURRENT_DATE,
-                        :sleep_start,
-                        :sleep_end,
-                        :duration,
-                        :screen_evening
-                    )
-                """), {
-                    "sleep_start": data.sleep_start_time,
-                    "sleep_end": data.sleep_end_time,
-                    "duration": data.sleep_duration_hours,
-                    "screen_evening": data.evening_screen_time_ms
-                })
+                if "sqlite" in str(engine.url):
+                    conn.execute(text("""
+                        INSERT INTO sleep_records 
+                        (date, sleep_start, sleep_end, duration_hours, screen_evening_ms)
+                        VALUES (
+                            date('now'),
+                            :sleep_start,
+                            :sleep_end,
+                            :duration,
+                            :screen_evening
+                        )
+                    """), {
+                        "sleep_start": data.sleep_start_time,
+                        "sleep_end": data.sleep_end_time,
+                        "duration": data.sleep_duration_hours,
+                        "screen_evening": data.evening_screen_time_ms
+                    })
+                else:
+                    conn.execute(text("""
+                        INSERT INTO sleep_records 
+                        (date, sleep_start, sleep_end, duration_hours, screen_evening_ms)
+                        VALUES (
+                            CURRENT_DATE,
+                            :sleep_start,
+                            :sleep_end,
+                            :duration,
+                            :screen_evening
+                        )
+                    """), {
+                        "sleep_start": data.sleep_start_time,
+                        "sleep_end": data.sleep_end_time,
+                        "duration": data.sleep_duration_hours,
+                        "screen_evening": data.evening_screen_time_ms
+                    })
                 conn.commit()
         except SQLAlchemyError as e:
             print(f"Error simpan ke DB: {e}")

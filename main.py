@@ -91,30 +91,31 @@ async def submit_daily_data(data: SleepData):
         target_date = parse_date(data.date)
 
         with engine.connect() as conn:
-            # UPSERT menggunakan ON CONFLICT
+            # UPSERT dengan sleep_source
             query = text("""
                 INSERT INTO daily_sleep_data (
                     date, total_screen_time_ms, evening_screen_time_ms,
                     app_switching_freq, blue_light_duration_ms,
                     sleep_start, sleep_end, duration_hours, journal_text,
-                    has_manual_input
+                    has_manual_input, sleep_source
                 ) VALUES (
                     :date, :total_screen_time_ms, :evening_screen_time_ms,
                     :app_switching_freq, :blue_light_duration_ms,
                     :sleep_start, :sleep_end, :duration_hours, :journal_text,
-                    :has_manual_input
+                    :has_manual_input, :sleep_source
                 )
                 ON CONFLICT (date) 
                 DO UPDATE SET
-                    total_screen_time_ms = EXCLUDED.total_screen_time_ms,
-                    evening_screen_time_ms = EXCLUDED.evening_screen_time_ms,
-                    app_switching_freq = EXCLUDED.app_switching_freq,
-                    blue_light_duration_ms = EXCLUDED.blue_light_duration_ms,
-                    sleep_start = EXCLUDED.sleep_start,
-                    sleep_end = EXCLUDED.sleep_end,
-                    duration_hours = EXCLUDED.duration_hours,
+                    total_screen_time_ms = COALESCE(EXCLUDED.total_screen_time_ms, daily_sleep_data.total_screen_time_ms),
+                    evening_screen_time_ms = COALESCE(EXCLUDED.evening_screen_time_ms, daily_sleep_data.evening_screen_time_ms),
+                    app_switching_freq = COALESCE(EXCLUDED.app_switching_freq, daily_sleep_data.app_switching_freq),
+                    blue_light_duration_ms = COALESCE(EXCLUDED.blue_light_duration_ms, daily_sleep_data.blue_light_duration_ms),
+                    sleep_start = COALESCE(EXCLUDED.sleep_start, daily_sleep_data.sleep_start),
+                    sleep_end = COALESCE(EXCLUDED.sleep_end, daily_sleep_data.sleep_end),
+                    duration_hours = COALESCE(EXCLUDED.duration_hours, daily_sleep_data.duration_hours),
                     journal_text = EXCLUDED.journal_text,
                     has_manual_input = EXCLUDED.has_manual_input,
+                    sleep_source = EXCLUDED.sleep_source,
                     updated_at = NOW()
             """)
 
@@ -132,7 +133,8 @@ async def submit_daily_data(data: SleepData):
                     data.sleep_duration_hours is not None,
                     data.sleep_start_time is not None,
                     data.sleep_end_time is not None
-                ])
+                ]),
+                "sleep_source": data.sleep_source or "manual"
             })
             conn.commit()
 

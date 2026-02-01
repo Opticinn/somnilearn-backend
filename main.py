@@ -83,7 +83,6 @@ def parse_date(date_str: str = None):
 
 @app.post("/submit_daily_data")
 async def submit_daily_data(data: SleepData):
-    """Submit data harian dengan upsert yang benar"""
     engine = get_engine()
     if not engine:
         return await _calculate_prediction(data)
@@ -92,45 +91,34 @@ async def submit_daily_data(data: SleepData):
         target_date = parse_date(data.date)
 
         with engine.connect() as conn:
-            # Cek apakah sudah ada data untuk tanggal ini
-            existing = conn.execute(text("""
-                SELECT id FROM daily_sleep_data WHERE date = :date
-            """), {"date": target_date}).fetchone()
+            # UPSERT menggunakan ON CONFLICT
+            query = text("""
+                INSERT INTO daily_sleep_data (
+                    date, total_screen_time_ms, evening_screen_time_ms,
+                    app_switching_freq, blue_light_duration_ms,
+                    sleep_start, sleep_end, duration_hours, journal_text,
+                    has_manual_input
+                ) VALUES (
+                    :date, :total_screen_time_ms, :evening_screen_time_ms,
+                    :app_switching_freq, :blue_light_duration_ms,
+                    :sleep_start, :sleep_end, :duration_hours, :journal_text,
+                    :has_manual_input
+                )
+                ON CONFLICT (date) 
+                DO UPDATE SET
+                    total_screen_time_ms = EXCLUDED.total_screen_time_ms,
+                    evening_screen_time_ms = EXCLUDED.evening_screen_time_ms,
+                    app_switching_freq = EXCLUDED.app_switching_freq,
+                    blue_light_duration_ms = EXCLUDED.blue_light_duration_ms,
+                    sleep_start = EXCLUDED.sleep_start,
+                    sleep_end = EXCLUDED.sleep_end,
+                    duration_hours = EXCLUDED.duration_hours,
+                    journal_text = EXCLUDED.journal_text,
+                    has_manual_input = EXCLUDED.has_manual_input,
+                    updated_at = NOW()
+            """)
 
-            if existing:
-                # UPDATE existing record
-                update_query = text("""
-                    UPDATE daily_sleep_data SET
-                        total_screen_time_ms = :total_screen_time_ms,
-                        evening_screen_time_ms = :evening_screen_time_ms,
-                        app_switching_freq = :app_switching_freq,
-                        blue_light_duration_ms = :blue_light_duration_ms,
-                        sleep_start = :sleep_start,
-                        sleep_end = :sleep_end,
-                        duration_hours = :duration_hours,
-                        journal_text = :journal_text,
-                        has_manual_input = :has_manual_input,
-                        updated_at = NOW()
-                    WHERE date = :date
-                """)
-            else:
-                # INSERT new record
-                update_query = text("""
-                    INSERT INTO daily_sleep_data (
-                        date, total_screen_time_ms, evening_screen_time_ms,
-                        app_switching_freq, blue_light_duration_ms,
-                        sleep_start, sleep_end, duration_hours, journal_text,
-                        has_manual_input
-                    ) VALUES (
-                        :date, :total_screen_time_ms, :evening_screen_time_ms,
-                        :app_switching_freq, :blue_light_duration_ms,
-                        :sleep_start, :sleep_end, :duration_hours, :journal_text,
-                        :has_manual_input
-                    )
-                """)
-
-            # Eksekusi query
-            conn.execute(update_query, {
+            conn.execute(query, {
                 "date": target_date,
                 "total_screen_time_ms": data.total_screen_time_ms,
                 "evening_screen_time_ms": data.evening_screen_time_ms,
@@ -152,7 +140,6 @@ async def submit_daily_data(data: SleepData):
 
     except Exception as e:
         print(f"❌ Database error: {e}")
-        # Jangan return error, biarkan prediksi tetap jalan
         return await _calculate_prediction(data)
 async def _calculate_prediction(data: SleepData):
     """Hitung prediksi insomnia berdasarkan data input"""

@@ -43,6 +43,9 @@ class SleepData(BaseModel):
     # Tanggal spesifik (opsional, default: today)
     date: str = None  # "YYYY-MM-DD"
 
+    # ✅ TAMBAHKAN INI!
+    sleep_source: str = None  # "manual", "auto_detected", dll
+
 def get_db_url():
     return os.getenv("DATABASE_URL")
 

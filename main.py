@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import datetime
+from datetime import datetime, date
 import os
 from sqlalchemy import create_engine, text, exc
 
@@ -101,7 +101,7 @@ async def submit_daily_data(data: SleepData):
         if data.date:
             target_date = datetime.strptime(data.date, "%Y-%m-%d").date()
         else:
-            target_date = datetime.now().date()
+            target_date = date.today()  # ← LEBIH BAIK pakai date.today()
 
         with engine.connect() as conn:
             # ✅ GUNAKAN UPSERT DENGAN ON CONFLICT
@@ -174,7 +174,7 @@ async def _calculate_prediction(data: SleepData):
     timing_factor = 0.0
     if data.sleep_start_time:
         try:
-            start = datetime.datetime.strptime(data.sleep_start_time, "%H:%M").time()
+            start = datetime.strptime(data.sleep_start_time, "%H:%M").time()
             timing_factor = 1.0 if start > datetime.time(23, 0) else 0.0
         except:
             timing_factor = 0.0
@@ -209,7 +209,7 @@ async def get_missing_dates(days: int = 3):
     engine = get_engine()
     if not engine:
         # Jika tidak ada database, kembalikan 3 hari terakhir
-        today = datetime.date.today()
+        today = date.today()
         return {
             "missing_dates": [
                 (today - datetime.timedelta(days=i)).strftime("%Y-%m-%d")
@@ -220,7 +220,7 @@ async def get_missing_dates(days: int = 3):
     try:
         with engine.connect() as conn:
             # Dapatkan tanggal yang sudah ada dalam N hari terakhir
-            today = datetime.date.today()
+            today = date.today()
             date_range = [today - datetime.timedelta(days=i) for i in range(days)]
             date_strings = [d.strftime("%Y-%m-%d") for d in date_range]
 

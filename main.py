@@ -5,7 +5,19 @@ import datetime
 import os
 from sqlalchemy import create_engine, text, exc
 
-app = FastAPI(title="SomniLearn Backend")
+def validate_sleep_source(provided_source: str, has_manual: bool) -> str:
+    """Validasi dan return sleep_source yang sesuai constraint"""
+    valid_sources = {'manual', 'auto_confirmed', 'auto_passive_confirmed', 'auto_detected'}
+
+    if provided_source in valid_sources:
+        return provided_source
+    elif has_manual:
+        return 'manual'
+    else:
+        return 'auto_detected'
+
+
+app = FastAPI(title="Circadia Backend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -88,37 +100,59 @@ async def submit_daily_data(data: SleepData):
         return await _calculate_prediction(data)
 
     try:
-        target_date = parse_date(data.date)
+        # Parse tanggal dengan aman
+        if data.date:
+            target_date = datetime.strptime(data.date, "%Y-%m-%d").date()
+        else:
+            target_date = datetime.now().date()
 
         with engine.connect() as conn:
-            # UPSERT dengan sleep_source
-            query = text("""
-                INSERT INTO daily_sleep_data (
-                    date, total_screen_time_ms, evening_screen_time_ms,
-                    app_switching_freq, blue_light_duration_ms,
-                    sleep_start, sleep_end, duration_hours, journal_text,
-                    has_manual_input, sleep_source
-                ) VALUES (
-                    :date, :total_screen_time_ms, :evening_screen_time_ms,
-                    :app_switching_freq, :blue_light_duration_ms,
-                    :sleep_start, :sleep_end, :duration_hours, :journal_text,
-                    :has_manual_input, :sleep_source
-                )
-                ON CONFLICT (date) 
-                DO UPDATE SET
-                    total_screen_time_ms = COALESCE(EXCLUDED.total_screen_time_ms, daily_sleep_data.total_screen_time_ms),
-                    evening_screen_time_ms = COALESCE(EXCLUDED.evening_screen_time_ms, daily_sleep_data.evening_screen_time_ms),
-                    app_switching_freq = COALESCE(EXCLUDED.app_switching_freq, daily_sleep_data.app_switching_freq),
-                    blue_light_duration_ms = COALESCE(EXCLUDED.blue_light_duration_ms, daily_sleep_data.blue_light_duration_ms),
-                    sleep_start = COALESCE(EXCLUDED.sleep_start, daily_sleep_data.sleep_start),
-                    sleep_end = COALESCE(EXCLUDED.sleep_end, daily_sleep_data.sleep_end),
-                    duration_hours = COALESCE(EXCLUDED.duration_hours, daily_sleep_data.duration_hours),
-                    journal_text = EXCLUDED.journal_text,
-                    has_manual_input = EXCLUDED.has_manual_input,
-                    sleep_source = EXCLUDED.sleep_source,
-                    updated_at = NOW()
-            """)
+            # Cek apakah sudah ada data untuk tanggal ini
+            existing = conn.execute(text("""
+                SELECT id FROM daily_sleep_data WHERE date = :date
+            """), {"date": target_date}).fetchone()
 
+            if existing:
+                # UPDATE existing record
+                query = text("""
+                    UPDATE daily_sleep_data SET
+                        total_screen_time_ms = :total_screen_time_ms,
+                        evening_screen_time_ms = :evening_screen_time_ms,
+                        app_switching_freq = :app_switching_freq,
+                        blue_light_duration_ms = :blue_light_duration_ms,
+                        sleep_start = :sleep_start,
+                        sleep_end = :sleep_end,
+                        duration_hours = :duration_hours,
+                        journal_text = :journal_text,
+                        has_manual_input = :has_manual_input,
+                        sleep_source = :sleep_source,
+                        updated_at = NOW()
+                    WHERE date = :date
+                """)
+            else:
+                # INSERT new record
+                query = text("""
+                    INSERT INTO daily_sleep_data (
+                        date, total_screen_time_ms, evening_screen_time_ms,
+                        app_switching_freq, blue_light_duration_ms,
+                        sleep_start, sleep_end, duration_hours, journal_text,
+                        has_manual_input, sleep_source
+                    ) VALUES (
+                        :date, :total_screen_time_ms, :evening_screen_time_ms,
+                        :app_switching_freq, :blue_light_duration_ms,
+                        :sleep_start, :sleep_end, :duration_hours, :journal_text,
+                        :has_manual_input, :sleep_source
+                    )
+                """)
+
+            # Prepare data
+            has_manual = any([
+                data.sleep_duration_hours is not None,
+                data.sleep_start_time is not None,
+                data.sleep_end_time is not None
+            ])
+
+            # Eksekusi query
             conn.execute(query, {
                 "date": target_date,
                 "total_screen_time_ms": data.total_screen_time_ms,
@@ -129,12 +163,8 @@ async def submit_daily_data(data: SleepData):
                 "sleep_end": data.sleep_end_time,
                 "duration_hours": data.sleep_duration_hours,
                 "journal_text": data.journal_text or "",
-                "has_manual_input": any([
-                    data.sleep_duration_hours is not None,
-                    data.sleep_start_time is not None,
-                    data.sleep_end_time is not None
-                ]),
-                "sleep_source": data.sleep_source if data.sleep_source else ("manual" if has_manual else "auto_detected")
+                "has_manual_input": has_manual,
+                "sleep_source": validate_sleep_source(data.sleep_source, has_manual)
             })
             conn.commit()
 
@@ -142,6 +172,7 @@ async def submit_daily_data(data: SleepData):
 
     except Exception as e:
         print(f"❌ Database error: {e}")
+        # Tetap kembalikan prediksi meski error database
         return await _calculate_prediction(data)
 async def _calculate_prediction(data: SleepData):
     """Hitung prediksi insomnia berdasarkan data input"""

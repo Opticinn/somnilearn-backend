@@ -157,15 +157,13 @@ async def submit_daily_data(data: SleepData):
             })
             conn.commit()
 
+            print(f"✅ Data berhasil disimpan untuk tanggal {target_date}")
+
         return await _calculate_prediction(data)
 
     except Exception as e:
-        print(f"❌ Database error: {str(e)}")
-        return await _calculate_prediction(data)
-
-    except Exception as e:
-        print(f"❌ Database error: {str(e)}")
-        # Tetap kembalikan prediksi meski error database
+        print(f"💥 ERROR KRITIS SAAT MENYIMPAN DATA: {str(e)}")
+        print(f"   Detail: {repr(e)}")  # ← INI AKAN TAMPILKAN ERROR SEBENARNYA
         return await _calculate_prediction(data)
 async def _calculate_prediction(data: SleepData):
     """Hitung prediksi insomnia berdasarkan data input"""

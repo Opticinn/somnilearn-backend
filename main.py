@@ -87,6 +87,7 @@ def init_db():
         except Exception as e:
             print(f"❌ DB init error: {str(e)}")
 
+
 def parse_date(date_str: str = None):
     """Parse tanggal dari string atau return today"""
     if date_str:

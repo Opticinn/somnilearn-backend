@@ -82,7 +82,7 @@ def init_db():
                 conn.commit()
                 print("✅ Table daily_sleep_data ready with sleep_source column")
         except Exception as e:
-            print(f"❌ DB init error: {e}")
+            print(f"❌ DB init error: {str(e)}")
 
 def parse_date(date_str: str = None):
     """Parse tanggal dari string atau return today"""
@@ -160,11 +160,11 @@ async def submit_daily_data(data: SleepData):
         return await _calculate_prediction(data)
 
     except Exception as e:
-        print(f"❌ Database error: {e}")
+        print(f"❌ Database error: {str(e)}")
         return await _calculate_prediction(data)
 
     except Exception as e:
-        print(f"❌ Database error: {e}")
+        print(f"❌ Database error: {str(e)}")
         # Tetap kembalikan prediksi meski error database
         return await _calculate_prediction(data)
 async def _calculate_prediction(data: SleepData):
@@ -237,7 +237,7 @@ async def get_missing_dates(days: int = 3):
             return {"missing_dates": missing_dates}
 
     except Exception as e:
-        print(f"❌ Error getting missing dates: {e}")
+        print(f"❌ Error getting missing dates: {str(e)}")
         # Fallback
         today = datetime.date.today()
         return {

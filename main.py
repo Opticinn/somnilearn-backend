@@ -100,59 +100,51 @@ async def submit_daily_data(data: SleepData):
         return await _calculate_prediction(data)
 
     try:
-        # Parse tanggal dengan aman
+        # Parse tanggal
         if data.date:
             target_date = datetime.strptime(data.date, "%Y-%m-%d").date()
         else:
             target_date = datetime.now().date()
 
         with engine.connect() as conn:
-            # Cek apakah sudah ada data untuk tanggal ini
-            existing = conn.execute(text("""
-                SELECT id FROM daily_sleep_data WHERE date = :date
-            """), {"date": target_date}).fetchone()
+            # ✅ GUNAKAN UPSERT DENGAN ON CONFLICT
+            query = text("""
+                INSERT INTO daily_sleep_data (
+                    date, total_screen_time_ms, evening_screen_time_ms,
+                    app_switching_freq, blue_light_duration_ms,
+                    sleep_start, sleep_end, duration_hours, journal_text,
+                    has_manual_input, sleep_source
+                ) VALUES (
+                    :date, :total_screen_time_ms, :evening_screen_time_ms,
+                    :app_switching_freq, :blue_light_duration_ms,
+                    :sleep_start, :sleep_end, :duration_hours, :journal_text,
+                    :has_manual_input, :sleep_source
+                )
+                ON CONFLICT (date) 
+                DO UPDATE SET
+                    total_screen_time_ms = EXCLUDED.total_screen_time_ms,
+                    evening_screen_time_ms = EXCLUDED.evening_screen_time_ms,
+                    app_switching_freq = EXCLUDED.app_switching_freq,
+                    blue_light_duration_ms = EXCLUDED.blue_light_duration_ms,
+                    sleep_start = EXCLUDED.sleep_start,
+                    sleep_end = EXCLUDED.sleep_end,
+                    duration_hours = EXCLUDED.duration_hours,
+                    journal_text = EXCLUDED.journal_text,
+                    has_manual_input = EXCLUDED.has_manual_input,
+                    sleep_source = EXCLUDED.sleep_source,
+                    updated_at = NOW()
+            """)
 
-            if existing:
-                # UPDATE existing record
-                query = text("""
-                    UPDATE daily_sleep_data SET
-                        total_screen_time_ms = :total_screen_time_ms,
-                        evening_screen_time_ms = :evening_screen_time_ms,
-                        app_switching_freq = :app_switching_freq,
-                        blue_light_duration_ms = :blue_light_duration_ms,
-                        sleep_start = :sleep_start,
-                        sleep_end = :sleep_end,
-                        duration_hours = :duration_hours,
-                        journal_text = :journal_text,
-                        has_manual_input = :has_manual_input,
-                        sleep_source = :sleep_source,
-                        updated_at = NOW()
-                    WHERE date = :date
-                """)
-            else:
-                # INSERT new record
-                query = text("""
-                    INSERT INTO daily_sleep_data (
-                        date, total_screen_time_ms, evening_screen_time_ms,
-                        app_switching_freq, blue_light_duration_ms,
-                        sleep_start, sleep_end, duration_hours, journal_text,
-                        has_manual_input, sleep_source
-                    ) VALUES (
-                        :date, :total_screen_time_ms, :evening_screen_time_ms,
-                        :app_switching_freq, :blue_light_duration_ms,
-                        :sleep_start, :sleep_end, :duration_hours, :journal_text,
-                        :has_manual_input, :sleep_source
-                    )
-                """)
-
-            # Prepare data
             has_manual = any([
                 data.sleep_duration_hours is not None,
                 data.sleep_start_time is not None,
                 data.sleep_end_time is not None
             ])
 
-            # Eksekusi query
+            # Validasi sleep_source
+            valid_sources = {'manual', 'auto_confirmed', 'auto_passive_confirmed', 'auto_detected'}
+            sleep_source = data.sleep_source if data.sleep_source in valid_sources else ('manual' if has_manual else 'auto_detected')
+
             conn.execute(query, {
                 "date": target_date,
                 "total_screen_time_ms": data.total_screen_time_ms,
@@ -164,10 +156,14 @@ async def submit_daily_data(data: SleepData):
                 "duration_hours": data.sleep_duration_hours,
                 "journal_text": data.journal_text or "",
                 "has_manual_input": has_manual,
-                "sleep_source": validate_sleep_source(data.sleep_source, has_manual)
+                "sleep_source": sleep_source
             })
             conn.commit()
 
+        return await _calculate_prediction(data)
+
+    except Exception as e:
+        print(f"❌ Database error: {e}")
         return await _calculate_prediction(data)
 
     except Exception as e:

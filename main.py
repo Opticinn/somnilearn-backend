@@ -134,7 +134,7 @@ async def submit_daily_data(data: SleepData):
                     data.sleep_start_time is not None,
                     data.sleep_end_time is not None
                 ]),
-                "sleep_source": data.sleep_source or "manual"
+                "sleep_source": data.sleep_source if data.sleep_source else ("manual" if has_manual else "auto_detected")
             })
             conn.commit()
 

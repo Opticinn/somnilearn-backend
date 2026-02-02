@@ -54,36 +54,33 @@ def get_engine():
 
 @app.on_event("startup")
 def init_db():
-    """Buat tabel utama jika belum ada"""
     engine = get_engine()
     if engine:
         try:
             with engine.connect() as conn:
+                # Buat tabel dengan kolom sleep_source
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS daily_sleep_data (
                         id SERIAL PRIMARY KEY,
                         date DATE UNIQUE,
-                        
-                        -- Data penggunaan HP (auto/manual)
                         total_screen_time_ms INT,
                         evening_screen_time_ms INT,
                         app_switching_freq INT,
                         blue_light_duration_ms INT,
-                        
-                        -- Data jurnal tidur (manual)
                         sleep_start TIME NULL,
                         sleep_end TIME NULL,
                         duration_hours FLOAT NULL,
                         journal_text TEXT DEFAULT '',
-                        
-                        -- Metadata
                         has_manual_input BOOLEAN DEFAULT FALSE,
+                        sleep_source VARCHAR(30) CHECK (
+                            sleep_source IN ('manual', 'auto_confirmed', 'auto_passive_confirmed', 'auto_detected')
+                        ),
                         created_at TIMESTAMP DEFAULT NOW(),
                         updated_at TIMESTAMP DEFAULT NOW()
                     )
                 """))
                 conn.commit()
-                print("✅ Table daily_sleep_data ready")
+                print("✅ Table daily_sleep_data ready with sleep_source column")
         except Exception as e:
             print(f"❌ DB init error: {e}")
 

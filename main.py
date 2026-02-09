@@ -101,14 +101,12 @@ async def submit_daily_data(data: SleepData):
         return await _calculate_prediction(data)
 
     try:
-        # Parse tanggal
         if data.date:
             target_date = datetime.strptime(data.date, "%Y-%m-%d").date()
         else:
-            target_date = date.today()  # ← LEBIH BAIK pakai date.today()
+            target_date = date.today()
 
         with engine.connect() as conn:
-            # ✅ GUNAKAN UPSERT DENGAN ON CONFLICT
             query = text("""
                 INSERT INTO daily_sleep_data (
                     date, total_screen_time_ms, evening_screen_time_ms,
@@ -142,9 +140,27 @@ async def submit_daily_data(data: SleepData):
                 data.sleep_end_time is not None
             ])
 
-            # Validasi sleep_source
             valid_sources = {'manual', 'auto_confirmed', 'auto_passive_confirmed', 'auto_detected'}
             sleep_source = data.sleep_source if data.sleep_source in valid_sources else ('manual' if has_manual else 'auto_detected')
+
+            # ✅ VALIDASI DAN KONVERSI WAKTU
+            sleep_start_db = None
+            sleep_end_db = None
+
+            if data.sleep_start_time:
+                try:
+                    # Validasi format HH:MM
+                    datetime.strptime(data.sleep_start_time, "%H:%M")
+                    sleep_start_db = data.sleep_start_time  # PostgreSQL bisa handle "HH:MM"
+                except ValueError:
+                    sleep_start_db = None
+
+            if data.sleep_end_time:
+                try:
+                    datetime.strptime(data.sleep_end_time, "%H:%M")
+                    sleep_end_db = data.sleep_end_time
+                except ValueError:
+                    sleep_end_db = None
 
             conn.execute(query, {
                 "date": target_date,
@@ -152,8 +168,8 @@ async def submit_daily_data(data: SleepData):
                 "evening_screen_time_ms": data.evening_screen_time_ms,
                 "app_switching_freq": data.app_switching_freq,
                 "blue_light_duration_ms": data.blue_light_duration_ms,
-                "sleep_start": data.sleep_start_time,
-                "sleep_end": data.sleep_end_time,
+                "sleep_start": sleep_start_db,  # ✅ SUDAH DIVALIDASI
+                "sleep_end": sleep_end_db,      # ✅ SUDAH DIVALIDASI
                 "duration_hours": data.sleep_duration_hours,
                 "journal_text": data.journal_text or "",
                 "has_manual_input": has_manual,
@@ -162,24 +178,26 @@ async def submit_daily_data(data: SleepData):
             conn.commit()
 
             print(f"✅ Data berhasil disimpan untuk tanggal {target_date}")
+            print(f"   Sleep: {sleep_start_db} - {sleep_end_db}")
 
         return await _calculate_prediction(data)
 
     except Exception as e:
         print(f"💥 ERROR KRITIS SAAT MENYIMPAN DATA: {str(e)}")
-        print(f"   Detail: {repr(e)}")  # ← INI AKAN TAMPILKAN ERROR SEBENARNYA
+        print(f"   Detail: {repr(e)}")
         return await _calculate_prediction(data)
 async def _calculate_prediction(data: SleepData):
     """Hitung prediksi insomnia berdasarkan data input"""
-    # Hitung metrik
     screen_hours = data.evening_screen_time_ms / 3_600_000
     screen_factor = min(screen_hours / 3.0, 1.0)
 
     timing_factor = 0.0
     if data.sleep_start_time:
         try:
-            start = datetime.strptime(data.sleep_start_time, "%H:%M").time()
-            timing_factor = 1.0 if start > datetime.time(23, 0) else 0.0
+            # ✅ Perbaiki ini
+            start_time_obj = datetime.strptime(data.sleep_start_time, "%H:%M")
+            if start_time_obj.hour > 23 or (start_time_obj.hour == 23 and start_time_obj.minute > 0):
+                timing_factor = 1.0
         except:
             timing_factor = 0.0
 
@@ -198,7 +216,7 @@ async def _calculate_prediction(data: SleepData):
         recommendation = "✅ Ritme sirkadian & pola tidur Anda optimal! Pertahankan konsistensi ini untuk kesehatan jangka panjang."
 
     return {
-        "circadian_stability": None,  # Akan dihitung dari data historis
+        "circadian_stability": None,
         "insomnia_risk": round(insomnia_risk, 2),
         "sleep_deprivation": sleep_deprivation,
         "recommendation": recommendation

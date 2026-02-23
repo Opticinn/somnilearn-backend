@@ -40,6 +40,8 @@ class SleepData(BaseModel):
     sleep_end_time: str = None    # "HH:MM"
     journal_text: str = ""
 
+    sleep_quality: int = None
+
     # Tanggal spesifik (opsional, default: today)
     date: str = None  # "YYYY-MM-DD"
 
@@ -111,12 +113,12 @@ async def submit_daily_data(data: SleepData):
                 INSERT INTO daily_sleep_data (
                     date, total_screen_time_ms, evening_screen_time_ms,
                     app_switching_freq, blue_light_duration_ms,
-                    sleep_start, sleep_end, duration_hours, journal_text,
+                    sleep_start, sleep_end, duration_hours, sleep_quality, journal_text,  # ← TAMBAH sleep_quality
                     has_manual_input, sleep_source
                 ) VALUES (
                     :date, :total_screen_time_ms, :evening_screen_time_ms,
                     :app_switching_freq, :blue_light_duration_ms,
-                    :sleep_start, :sleep_end, :duration_hours, :journal_text,
+                    :sleep_start, :sleep_end, :duration_hours, :sleep_quality, :journal_text,  # ← TAMBAH :sleep_quality
                     :has_manual_input, :sleep_source
                 )
                 ON CONFLICT (date) 
@@ -128,6 +130,7 @@ async def submit_daily_data(data: SleepData):
                     sleep_start = EXCLUDED.sleep_start,
                     sleep_end = EXCLUDED.sleep_end,
                     duration_hours = EXCLUDED.duration_hours,
+                    sleep_quality = EXCLUDED.sleep_quality,  # ← TAMBAH INI
                     journal_text = EXCLUDED.journal_text,
                     has_manual_input = EXCLUDED.has_manual_input,
                     sleep_source = EXCLUDED.sleep_source,
@@ -170,6 +173,7 @@ async def submit_daily_data(data: SleepData):
                 "blue_light_duration_ms": data.blue_light_duration_ms,
                 "sleep_start": sleep_start_db,  # ✅ SUDAH DIVALIDASI
                 "sleep_end": sleep_end_db,      # ✅ SUDAH DIVALIDASI
+                "sleep_quality": data.sleep_quality,
                 "duration_hours": data.sleep_duration_hours,
                 "journal_text": data.journal_text or "",
                 "has_manual_input": has_manual,

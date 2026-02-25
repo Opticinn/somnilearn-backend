@@ -113,12 +113,12 @@ async def submit_daily_data(data: SleepData):
                 INSERT INTO daily_sleep_data (
                     date, total_screen_time_ms, evening_screen_time_ms,
                     app_switching_freq, blue_light_duration_ms,
-                    sleep_start, sleep_end, duration_hours, sleep_quality, journal_text,  # ← TAMBAH sleep_quality
+                    sleep_start, sleep_end, duration_hours, sleep_quality, journal_text,
                     has_manual_input, sleep_source
                 ) VALUES (
                     :date, :total_screen_time_ms, :evening_screen_time_ms,
                     :app_switching_freq, :blue_light_duration_ms,
-                    :sleep_start, :sleep_end, :duration_hours, :sleep_quality, :journal_text,  # ← TAMBAH :sleep_quality
+                    :sleep_start, :sleep_end, :duration_hours, :sleep_quality, :journal_text,
                     :has_manual_input, :sleep_source
                 )
                 ON CONFLICT (date) 
@@ -130,7 +130,7 @@ async def submit_daily_data(data: SleepData):
                     sleep_start = EXCLUDED.sleep_start,
                     sleep_end = EXCLUDED.sleep_end,
                     duration_hours = EXCLUDED.duration_hours,
-                    sleep_quality = EXCLUDED.sleep_quality,  # ← TAMBAH INI
+                    sleep_quality = EXCLUDED.sleep_quality,
                     journal_text = EXCLUDED.journal_text,
                     has_manual_input = EXCLUDED.has_manual_input,
                     sleep_source = EXCLUDED.sleep_source,
